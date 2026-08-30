@@ -1,0 +1,72 @@
+/* Mobile Only Viewport Optimizations */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  background-color: #0b0f19;
+}
+
+input, textarea {
+  user-select: text;
+}
+
+/* Sleek Mobile Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Tab & View Fade Animations */
+.tab-view {
+  animation: fadeIn 0.18s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal States */
+.modal-active {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.modal-active > div {
+  transform: translateY(0) !important;
+}
+
+/* Tactile Mobile Button Feedback */
+button:active {
+  transform: scale(0.97);
+}
+
+/* Active Nav Bar Tab */
+.nav-tab-btn.active {
+  color: #f59e0b; /* Amber 500 */
+}
+.nav-tab-btn.active i {
+  transform: scale(1.1);
+  transition: transform 0.15s ease;
+}
