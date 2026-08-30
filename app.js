@@ -7,6 +7,8 @@
       this.currentTab = 'orders';
       this.currentPage = 'tab-orders';
       this.customers = [];
+      this.activeCustomer = null;
+      this.isEditMode = false;
       this.supabase = null;
       this.isSupabaseConnected = false;
 
@@ -101,7 +103,7 @@
       if (closeModalBtn) closeModalBtn.addEventListener('click', () => this.closeAddCustomerModal());
       if (cancelModalBtn) cancelModalBtn.addEventListener('click', () => this.closeAddCustomerModal());
 
-      // Form Submit
+      // Add Customer Form Submit
       const form = document.getElementById('add-customer-form');
       if (form) {
         form.addEventListener('submit', (e) => this.handleCustomerSubmit(e));
@@ -113,6 +115,43 @@
         searchInput.addEventListener('input', (e) => {
           this.filterCustomers(e.target.value);
         });
+      }
+
+      // ================= VIEW & EDIT MODAL CONTROLS =================
+      const closeViewModalBtn = document.getElementById('close-view-customer-modal-btn');
+      if (closeViewModalBtn) {
+        closeViewModalBtn.addEventListener('click', () => this.closeViewCustomerModal());
+      }
+
+      const editToggleBtn = document.getElementById('view-modal-edit-toggle-btn');
+      if (editToggleBtn) {
+        editToggleBtn.addEventListener('click', () => this.toggleEditMode());
+      }
+
+      const cancelEditBtn = document.getElementById('cancel-edit-btn');
+      if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => this.disableEditMode());
+      }
+
+      const editForm = document.getElementById('edit-customer-form');
+      if (editForm) {
+        editForm.addEventListener('submit', (e) => this.handleEditCustomerSubmit(e));
+      }
+
+      // ================= DELETE CONFIRMATION CONTROLS =================
+      const viewDeleteBtn = document.getElementById('view-delete-customer-btn');
+      if (viewDeleteBtn) {
+        viewDeleteBtn.addEventListener('click', () => this.promptDeleteCustomer());
+      }
+
+      const cancelDeleteBtn = document.getElementById('cancel-delete-modal-btn');
+      if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', () => this.closeDeleteConfirmModal());
+      }
+
+      const confirmDeleteBtn = document.getElementById('confirm-delete-action-btn');
+      if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', () => this.executeDeleteCustomer());
       }
 
       // Settings Modal
@@ -267,7 +306,7 @@
       }
     }
 
-    // ================= MODAL CONTROLS =================
+    // ================= ADD CUSTOMER MODAL =================
     openAddCustomerModal() {
       const modal = document.getElementById('add-customer-modal');
       const idPreview = document.getElementById('preview-customer-id');
@@ -286,7 +325,7 @@
       if (modal) modal.classList.remove('modal-active');
     }
 
-    // ================= SUBMIT CUSTOMER =================
+    // ================= SUBMIT NEW CUSTOMER =================
     async handleCustomerSubmit(e) {
       e.preventDefault();
       
@@ -346,7 +385,241 @@
       }
     }
 
-    // ================= RENDER LIST =================
+    // ================= VIEW CUSTOMER DETAILS =================
+    openCustomerDetails(identifier) {
+      const customer = this.customers.find(c => (c.id && c.id === identifier) || c.customer_code === identifier);
+      if (!customer) {
+        this.showToast('Customer record not found', 'error');
+        return;
+      }
+
+      this.activeCustomer = customer;
+      this.disableEditMode();
+
+      // Populate View UI
+      const nameEl = document.getElementById('view-cust-name');
+      const codeEl = document.getElementById('view-cust-code');
+      const modalIdBadge = document.getElementById('view-modal-id-badge');
+      const mobileEl = document.getElementById('view-cust-mobile');
+      const emailEl = document.getElementById('view-cust-email');
+      const addressEl = document.getElementById('view-cust-address');
+      const createdEl = document.getElementById('view-cust-created-at');
+      
+      const callLink = document.getElementById('view-call-link');
+      const whatsappLink = document.getElementById('view-whatsapp-link');
+      const emailLink = document.getElementById('view-email-link');
+
+      const code = customer.customer_code || 'CUST-XXXX';
+      const cleanMobile = customer.mobile ? customer.mobile.replace(/[^\d+]/g, '') : '';
+
+      if (nameEl) nameEl.textContent = customer.name;
+      if (codeEl) codeEl.textContent = code;
+      if (modalIdBadge) modalIdBadge.textContent = code;
+      if (mobileEl) mobileEl.textContent = customer.mobile || 'None';
+      if (emailEl) emailEl.textContent = customer.email || 'None';
+      if (addressEl) addressEl.textContent = customer.address || 'No address specified.';
+      if (createdEl) {
+        createdEl.textContent = customer.created_at 
+          ? new Date(customer.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          : 'Recent';
+      }
+
+      if (callLink) callLink.href = `tel:${cleanMobile}`;
+      if (whatsappLink) whatsappLink.href = `https://wa.me/${cleanMobile.replace('+', '')}`;
+      if (emailLink) emailLink.href = customer.email ? `mailto:${customer.email}` : '#';
+
+      // Open Modal
+      const modal = document.getElementById('view-customer-modal');
+      if (modal) modal.classList.add('modal-active');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    closeViewCustomerModal() {
+      const modal = document.getElementById('view-customer-modal');
+      if (modal) modal.classList.remove('modal-active');
+      this.activeCustomer = null;
+      this.disableEditMode();
+    }
+
+    // ================= EDIT CUSTOMER LOGIC =================
+    toggleEditMode() {
+      if (this.isEditMode) {
+        this.disableEditMode();
+      } else {
+        this.enableEditMode();
+      }
+    }
+
+    enableEditMode() {
+      if (!this.activeCustomer) return;
+      this.isEditMode = true;
+
+      const viewBody = document.getElementById('customer-view-body');
+      const editForm = document.getElementById('edit-customer-form');
+      const deleteContainer = document.getElementById('view-modal-delete-container');
+      const editBtnText = document.getElementById('view-modal-edit-btn-text');
+      const modalTitle = document.getElementById('view-modal-title');
+
+      if (viewBody) viewBody.classList.add('hidden');
+      if (editForm) editForm.classList.remove('hidden');
+      if (deleteContainer) deleteContainer.classList.add('hidden');
+      if (editBtnText) editBtnText.textContent = 'Viewing';
+      if (modalTitle) modalTitle.textContent = 'Edit Customer';
+
+      // Fill form values
+      const c = this.activeCustomer;
+      document.getElementById('edit-cust-name').value = c.name || '';
+      document.getElementById('edit-cust-mobile').value = c.mobile || '';
+      document.getElementById('edit-cust-email').value = c.email || '';
+      document.getElementById('edit-cust-address').value = c.address || '';
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    disableEditMode() {
+      this.isEditMode = false;
+
+      const viewBody = document.getElementById('customer-view-body');
+      const editForm = document.getElementById('edit-customer-form');
+      const deleteContainer = document.getElementById('view-modal-delete-container');
+      const editBtnText = document.getElementById('view-modal-edit-btn-text');
+      const modalTitle = document.getElementById('view-modal-title');
+
+      if (viewBody) viewBody.classList.remove('hidden');
+      if (editForm) editForm.classList.add('hidden');
+      if (deleteContainer) deleteContainer.classList.remove('hidden');
+      if (editBtnText) editBtnText.textContent = 'Edit';
+      if (modalTitle) modalTitle.textContent = 'Customer Details';
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async handleEditCustomerSubmit(e) {
+      e.preventDefault();
+      if (!this.activeCustomer) return;
+
+      const saveBtn = document.getElementById('save-edit-btn');
+      const originalBtnText = saveBtn ? saveBtn.textContent : '';
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+      }
+
+      const updatedName = document.getElementById('edit-cust-name').value.trim();
+      const updatedMobile = document.getElementById('edit-cust-mobile').value.trim();
+      const updatedEmail = document.getElementById('edit-cust-email').value.trim();
+      const updatedAddress = document.getElementById('edit-cust-address').value.trim();
+
+      const updatedPayload = {
+        name: updatedName,
+        mobile: updatedMobile,
+        email: updatedEmail || null,
+        address: updatedAddress || null,
+        updated_at: new Date().toISOString()
+      };
+
+      try {
+        if (this.isSupabaseConnected && this.supabase) {
+          const matchQuery = this.activeCustomer.id 
+            ? { id: this.activeCustomer.id } 
+            : { customer_code: this.activeCustomer.customer_code };
+
+          const { error } = await this.supabase
+            .from('customers')
+            .update(updatedPayload)
+            .match(matchQuery);
+
+          if (error) throw error;
+        }
+
+        // Update local state
+        Object.assign(this.activeCustomer, updatedPayload);
+        this.saveLocalCustomers();
+
+        this.showToast(`Customer ${this.activeCustomer.customer_code} updated!`, 'success');
+        
+        // Refresh views
+        this.openCustomerDetails(this.activeCustomer.customer_code);
+        this.renderCustomerList(this.customers);
+
+      } catch (err) {
+        console.error('Failed to update customer:', err);
+        this.showToast(`Update failed: ${err.message || 'Error'}`, 'error');
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalBtnText;
+        }
+      }
+    }
+
+    // ================= DELETE WITH CONFIRMATION =================
+    promptDeleteCustomer() {
+      if (!this.activeCustomer) return;
+
+      const deleteModal = document.getElementById('delete-confirm-modal');
+      const nameEl = document.getElementById('delete-confirm-name');
+      const codeEl = document.getElementById('delete-confirm-code');
+
+      if (nameEl) nameEl.textContent = this.activeCustomer.name;
+      if (codeEl) codeEl.textContent = this.activeCustomer.customer_code;
+
+      if (deleteModal) deleteModal.classList.add('modal-active');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    closeDeleteConfirmModal() {
+      const deleteModal = document.getElementById('delete-confirm-modal');
+      if (deleteModal) deleteModal.classList.remove('modal-active');
+    }
+
+    async executeDeleteCustomer() {
+      if (!this.activeCustomer) return;
+
+      const confirmBtn = document.getElementById('confirm-delete-action-btn');
+      const originalText = confirmBtn ? confirmBtn.textContent : '';
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Deleting...';
+      }
+
+      const codeToDelete = this.activeCustomer.customer_code;
+      const idToDelete = this.activeCustomer.id;
+
+      try {
+        if (this.isSupabaseConnected && this.supabase) {
+          const matchQuery = idToDelete ? { id: idToDelete } : { customer_code: codeToDelete };
+          const { error } = await this.supabase
+            .from('customers')
+            .delete()
+            .match(matchQuery);
+
+          if (error) throw error;
+        }
+
+        // Remove from local list
+        this.customers = this.customers.filter(c => c.customer_code !== codeToDelete && c.id !== idToDelete);
+        this.saveLocalCustomers();
+
+        this.closeDeleteConfirmModal();
+        this.closeViewCustomerModal();
+        this.renderCustomerList(this.customers);
+        this.updateStats();
+
+        this.showToast(`Customer ${codeToDelete} deleted permanently.`, 'info');
+
+      } catch (err) {
+        console.error('Delete failed:', err);
+        this.showToast(`Delete failed: ${err.message || 'Error'}`, 'error');
+      } finally {
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = originalText;
+        }
+      }
+    }
+
+    // ================= RENDER CUSTOMER LIST =================
     renderCustomerList(list) {
       const container = document.getElementById('customers-list-container');
       const emptyState = document.getElementById('customers-empty-state');
@@ -370,6 +643,7 @@
         const code = c.customer_code || 'CUST-XXXX';
         const formattedDate = c.created_at ? new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently';
         const cleanMobile = c.mobile ? c.mobile.replace(/[^\d+]/g, '') : '';
+        const identifier = c.id || code;
 
         return `
           <div class="bg-slate-800/90 border border-slate-700/70 hover:border-slate-600 rounded-2xl p-4 transition shadow-sm space-y-2.5">
@@ -387,11 +661,14 @@
                 </div>
               </div>
               
-              <button onclick="app.copyText('${code}', 'Customer ID${code}')" class="p-1.5 rounded-lg bg-slate-750 text-slate-400 hover:text-white transition" title="Copy ID">
-                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <!-- View Button -->
+              <button onclick="app.openCustomerDetails('${identifier}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 text-xs font-semibold transition active:scale-95 shadow-sm">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                <span>View</span>
               </button>
             </div>
 
+            <!-- Contact Row -->
             <div class="space-y-1 text-xs text-slate-300 pt-1 border-t border-slate-750/70">
               <div class="flex items-center justify-between py-0.5">
                 <span class="text-slate-400 flex items-center gap-1.5">
@@ -403,20 +680,6 @@
                   <a href="https://wa.me/${cleanMobile.replace('+', '')}" target="_blank" class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 font-medium hover:bg-emerald-500 hover:text-white transition">WhatsApp</a>
                 </div>
               </div>
-
-              ${c.email ? `
-                <div class="flex items-center space-x-1.5 text-slate-300 py-0.5">
-                  <i data-lucide="mail" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
-                  <a href="mailto:${this.escapeHtml(c.email)}" class="hover:underline truncate">${this.escapeHtml(c.email)}</a>
-                </div>
-              ` : ''}
-
-              ${c.address ? `
-                <div class="flex items-start space-x-1.5 text-slate-300 py-0.5">
-                  <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5"></i>
-                  <span class="text-slate-300">${this.escapeHtml(c.address)}</span>
-                </div>
-              ` : ''}
             </div>
           </div>
         `;
@@ -481,7 +744,7 @@
     }
 
     showPlaceholder(feature, desc) {
-      this.showToast(`${feature}:${desc}`, 'info');
+      this.showToast(`${feature}: ${desc}`, 'info');
     }
 
     showToast(message, type = 'info') {
